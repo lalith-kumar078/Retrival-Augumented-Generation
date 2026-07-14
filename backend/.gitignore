@@ -1,0 +1,11 @@
+venv/
+venv_win/
+.venv/
+__pycache__/
+*.pyc
+.env
+data/
+*.db
+*.sqlite
+*.sqlite3
+.cache/

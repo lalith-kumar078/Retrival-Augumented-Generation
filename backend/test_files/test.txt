@@ -1,0 +1,9 @@
+RAG Ingestion Architecture Document
+
+The modern Retrieval-Augmented Generation (RAG) ingestion pipeline consists of several key stages:
+1. Parsing: Documents (PDFs, Word docs, PowerPoint presentations) are parsed using tools like Docling or PyMuPDF to extract text and structure.
+2. Chunking: The extracted text is divided into semantically meaningful chunks, typically using overlapping sliding windows to preserve context across boundaries.
+3. Embedding: A specialized model, such as all-MiniLM-L6-v2, converts the chunks into dense vector representations.
+4. Storage: The vectors are stored alongside metadata in a vector database like SQLite-vec, enabling efficient similarity search.
+
+This architecture ensures that the LLM has access to highly relevant context when answering user queries.

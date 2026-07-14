@@ -1,0 +1,42 @@
+# Environment / secrets
+.env
+.env.*
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Git
+.git/
+.gitattributes
+.gitignore
+
+# Local data (DB + uploads — should not be baked into image)
+data/
+logs/
+
+# IDE / OS files
+.vscode/
+.idea/
+*.swp
+*.swa
+.DS_Store
+Thumbs.db
+
+# Node (if frontend files leak into backend dir)
+node_modules/
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Tests
+test_*.py

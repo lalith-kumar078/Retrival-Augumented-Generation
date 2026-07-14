@@ -1,0 +1,24 @@
+INFO:     Started server process [4943]
+INFO:     Waiting for application startup.
+2026-07-13 18:34:51 | INFO     | app.main | ============================================================
+2026-07-13 18:34:51 | INFO     | app.main | RAG Agent Backend starting up
+2026-07-13 18:34:51 | INFO     | app.main |   LLM: Groq
+2026-07-13 18:34:51 | INFO     | app.main |   Groq model: llama-3.3-70b-versatile
+2026-07-13 18:34:51 | INFO     | app.main |   Embedding model: all-MiniLM-L6-v2
+2026-07-13 18:34:51 | INFO     | app.main |   SQLite-vec path: ./data/rag_store.db
+2026-07-13 18:34:51 | INFO     | app.main |   Chunk size: 512, overlap: 50
+2026-07-13 18:34:51 | INFO     | app.main |   Rate limit: 30/minute
+2026-07-13 18:34:51 | INFO     | app.main |   API key: set
+2026-07-13 18:34:51 | INFO     | app.main | ============================================================
+2026-07-13 18:34:51 | INFO     | app.services.vectorstore | Connecting to SQLite-vec at /home/kira/Downloads/rag/backend/data/rag_store.db in thread MainThread
+2026-07-13 18:34:51 | INFO     | app.services.vectorstore | SQLite-vec schema initialized
+2026-07-13 18:34:51 | INFO     | app.main | SQLite-vec initialized
+2026-07-13 18:34:51 | INFO     | app.services.tracing | Trace/feedback tables initialized
+2026-07-13 18:34:51 | INFO     | app.main | Trace/feedback tables initialized
+2026-07-13 18:34:51 | INFO     | app.services.usage | Usage table initialized
+2026-07-13 18:34:51 | INFO     | app.main | Usage table initialized
+INFO:     Application startup complete.
+ERROR:    [Errno 98] error while attempting to bind on address ('127.0.0.1', 8000): address already in use
+INFO:     Waiting for application shutdown.
+2026-07-13 18:34:51 | INFO     | app.main | RAG Agent Backend shutting down
+INFO:     Application shutdown complete.
