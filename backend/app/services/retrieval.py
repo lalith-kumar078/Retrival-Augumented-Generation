@@ -11,7 +11,11 @@ from app.services.vectorstore import hybrid_search
 logger = logging.getLogger(__name__)
 
 # Relevance threshold for hallucination guard (Groq 0-10 scale)
-RELEVANCE_THRESHOLD = 5.0
+# Set to 1.0: the guard only blocks truly irrelevant context (all scores 0).
+# The LLM generation step itself naturally says "not enough info" when context
+# is insufficient, so the guard is a last-resort safety net, not a strict filter.
+# Previous values of 5.0 and 3.0 both caused false blocks on legitimate queries.
+RELEVANCE_THRESHOLD = 1.0
 
 
 async def multi_query_retrieve(
@@ -60,7 +64,11 @@ async def rerank_chunks(query: str, chunks: list[dict], top_k: int = 10) -> list
     # We only want to re-rank the top candidates to save API cost and latency
     chunks_to_score = chunks[:20] 
     
-    scores = await score_chunks_with_groq(query, chunks_to_score)
+    try:
+        scores = await score_chunks_with_groq(query, chunks_to_score)
+    except Exception as e:
+        logger.warning(f"Groq re-ranking threw an exception: {e}")
+        scores = {}
     
     if scores:
         for chunk in chunks_to_score:
@@ -77,12 +85,16 @@ async def rerank_chunks(query: str, chunks: list[dict], top_k: int = 10) -> list
             chunk["is_fallback"] = True
         return chunks[:top_k]
 
+from collections import deque
+_recent_guard_results = deque(maxlen=10)
+
 async def check_relevance(query: str, chunks: list[dict], threshold: float = None) -> bool:
     """
     Hallucination guard: check if retrieved chunks are relevant enough
     to the query. Returns False if context doesn't sufficiently match.
     """
     if not chunks:
+        _recent_guard_results.append(False)
         return False
 
     # Use the top chunk's rerank_score
@@ -97,16 +109,15 @@ async def check_relevance(query: str, chunks: list[dict], threshold: float = Non
 
     is_relevant = top_score >= actual_threshold
     
-    print("\n--- RELEVANCE EVALUATION ---")
-    print(f"3. Extracted chunk scores:")
-    for chunk in chunks:
-        print(f"   Chunk: {chunk.get('chunk_id')}, Score: {chunk.get('rerank_score')}")
-    print(f"   Threshold: {actual_threshold}")
-    print(f"4. Final boolean decision: {is_relevant} (Top score: {top_score} >= Threshold: {actual_threshold})")
-    print("--------------------------------------\n")
+    score_summary = ", ".join(f"{c.get('chunk_id','?')}={c.get('rerank_score',0)}" for c in chunks[:5])
+    logger.debug(f"RELEVANCE CHECK: top_score={top_score}, threshold={actual_threshold}, relevant={is_relevant}, scores=[{score_summary}]")
 
     if not is_relevant:
         logger.info(f"Hallucination guard triggered: top_score={top_score} < threshold={actual_threshold}")
+
+    _recent_guard_results.append(is_relevant)
+    if len(_recent_guard_results) == 10 and _recent_guard_results.count(False) >= 8:
+        logger.warning(f"HIGH HALLUCINATION GUARD BLOCK RATE: {_recent_guard_results.count(False)} of the last 10 queries blocked! Check if reranker JSON parsing is failing or scales changed.")
 
     return is_relevant
 

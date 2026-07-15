@@ -38,8 +38,16 @@ def semantic_chunk(
         if current_chunk and len(current_chunk) + len(section) + 1 > chunk_size:
             line_num = text[:text.find(current_chunk)].count('\n') + 1 if current_chunk in text else 1
             chunks.append(_make_chunk(current_chunk, page_number, line_num, metadata))
-            # Sliding window overlap: keep the tail of the current chunk
-            overlap_text = current_chunk[-chunk_overlap:] if chunk_overlap > 0 else ""
+            # Sliding window overlap: keep the tail of the current chunk, aligning to word boundary
+            if chunk_overlap > 0:
+                overlap_target = max(0, len(current_chunk) - chunk_overlap)
+                aligned_start = current_chunk.find(' ', overlap_target)
+                if aligned_start != -1:
+                    overlap_text = current_chunk[aligned_start + 1:].strip()
+                else:
+                    overlap_text = current_chunk[overlap_target:].strip()
+            else:
+                overlap_text = ""
             current_chunk = overlap_text + " " + section if overlap_text else section
         else:
             current_chunk = current_chunk + "\n\n" + section if current_chunk else section
@@ -52,7 +60,17 @@ def semantic_chunk(
             if chunk_text:
                 line_num = text[:text.find(chunk_text)].count('\n') + 1 if chunk_text in text else 1
                 chunks.append(_make_chunk(chunk_text, page_number, line_num, metadata))
-            overlap_start = max(0, split_pos - chunk_overlap)
+            
+            if chunk_overlap > 0:
+                overlap_target = max(0, split_pos - chunk_overlap)
+                aligned_start = current_chunk.find(' ', overlap_target)
+                if aligned_start != -1 and aligned_start < split_pos:
+                    overlap_start = aligned_start + 1
+                else:
+                    overlap_start = overlap_target
+            else:
+                overlap_start = split_pos
+                
             current_chunk = current_chunk[overlap_start:].strip()
 
     # Don't forget the last chunk
@@ -65,18 +83,22 @@ def semantic_chunk(
 
 def _find_sentence_boundary(text: str, max_pos: int) -> int:
     """Find the best sentence boundary before max_pos."""
-    # Look for sentence-ending punctuation followed by space
+    # Look for sentence-ending punctuation followed by space or newline
     candidates = []
-    for match in re.finditer(r'[.!?]\s', text[:max_pos]):
+    for match in re.finditer(r'[.!?][\s\n]', text[:max_pos]):
         candidates.append(match.end())
     
     if candidates:
         return candidates[-1]  # Last sentence boundary before max_pos
     
-    # Fallback: split at last space
+    # Fallback: split at last newline or space
+    last_newline = text[:max_pos].rfind('\n')
+    if last_newline > 0:
+        return last_newline + 1
+        
     last_space = text[:max_pos].rfind(' ')
     if last_space > 0:
-        return last_space
+        return last_space + 1
     
     # Last resort: hard split
     return max_pos

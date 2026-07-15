@@ -6,6 +6,7 @@ Uses AsyncGroq to directly make asynchronous calls without blocking the event lo
 import asyncio
 import json
 import logging
+import re
 from typing import AsyncGenerator
 
 from groq import AsyncGroq
@@ -273,6 +274,7 @@ async def score_chunks_with_groq(query: str, chunks: list[dict]) -> dict[str, in
 
     prompt_parts = [
         f"You are a relevance scoring engine. Rate the relevance of the following passages to the query on a scale of 0 to 10 (0 = completely irrelevant, 10 = perfectly answers the query).",
+        f"IMPORTANT: If the query is a general request to summarize, explain, or explore the document (e.g., 'summarize', 'key points', 'what is this about'), you MUST score all provided passages highly (e.g. 8-10) because they are inherently relevant to summarizing the document.",
         f"Query: {query}",
         "Passages:"
     ]
@@ -290,6 +292,8 @@ async def score_chunks_with_groq(query: str, chunks: list[dict]) -> dict[str, in
     
     prompt = "\n".join(prompt_parts)
 
+    logger.debug(f"RERANKER PROMPT:\n{prompt}")
+
     try:
         client = _get_client()
         response = await client.chat.completions.create(
@@ -304,34 +308,48 @@ async def score_chunks_with_groq(query: str, chunks: list[dict]) -> dict[str, in
         
         response_text = response.choices[0].message.content or ""
         
-        print("\n--- HALLUCINATION GUARD DIAGNOSTIC ---")
-        print(f"1. Raw, unparsed text response from Groq:\n{response_text}")
+        logger.debug(f"RERANKER RAW RESPONSE:\n{response_text}")
         
-        if response_text.startswith("```json"):
-            response_text = response_text.strip("```json").strip("```").strip()
-        elif response_text.startswith("```"):
-            response_text = response_text.strip("```").strip()
+        # Robust JSON extraction
+        json_match = re.search(r'(\{.*\}|\[.*\])', response_text, re.DOTALL)
+        if json_match:
+            extracted_json = json_match.group(1)
+        else:
+            extracted_json = response_text
             
         try:
-            scores = json.loads(response_text)
-            print(f"2. Parsed JSON object:\n{json.dumps(scores, indent=2)}")
-            print(f"Parsed keys: {list(scores.keys())}")
-            print(f"Value types: {[type(v) for v in scores.values()]}")
-            print(f"Value ranges: {min(scores.values()) if scores else None} to {max(scores.values()) if scores else None}")
+            scores = json.loads(extracted_json)
+            logger.debug(f"RERANKER PARSED SCORES: {json.dumps(scores, indent=2)}")
         except Exception as e:
-            print(f"2. Parsing JSON failed: {e}")
-            scores = {}
+            logger.error(f"JSON parsing failed for reranking: {e}. Raw text: {response_text}")
+            raise RuntimeError(f"Reranking failed to output valid JSON: {e}")
         
         mapped_scores = {}
+        
+        # Determine if we need to auto-scale from 0-1 to 0-10
+        max_val = 0
+        for v in scores.values():
+            try:
+                val = float(v)
+                if val > max_val:
+                    max_val = val
+            except (ValueError, TypeError):
+                pass
+                
+        scale_multiplier = 10 if (max_val <= 1.0 and max_val > 0) else 1
+        
         for k, v in scores.items():
-            k_str = str(k)
+            # Handle list indexes if model returned an array or something weird
+            k_str = str(k).strip('[]"\'') 
             if k_str in id_map:
                 try:
-                    mapped_scores[id_map[k_str]] = int(v)
-                except (ValueError, TypeError):
+                    # Convert string floats, apply scale multiplier if it was 0-1
+                    val_float = float(v) * scale_multiplier
+                    mapped_scores[id_map[k_str]] = int(val_float)
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Failed to parse score value {v} for key {k}: {e}")
                     pass
         return mapped_scores
     except Exception as e:
-        print(f"Failed to score chunks with Groq: {e}")
         logger.error(f"Failed to score chunks with Groq: {e}")
-        return {}
+        raise RuntimeError(f"Failed to score chunks with Groq: {e}")

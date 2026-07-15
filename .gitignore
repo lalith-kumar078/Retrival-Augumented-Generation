@@ -1,0 +1,8 @@
+
+.pdf_test.pdf
+.txt_test.txt
+backend/_test_chunking.txt
+backend/_verify_chunks.py
+backend/comprehensive_results.json
+backend/comprehensive_test.py
+backend/list_docs.py

@@ -448,16 +448,8 @@ async def hybrid_search(query: str, top_k: int = 10, filters: dict = None) -> li
         keyword_search(query, top_k=top_k * 2, filters=filters)
     )
 
-    print("\n--- HYBRID SEARCH DIAGNOSTIC LOGS ---")
-    print(f"Query: '{query}'")
-    print(f"Filters: {filters}")
-    print("\n(a) Raw results from vector search alone:")
-    for idx, r in enumerate(vector_results):
-        print(f"  [{idx}] chunk_id={r.get('chunk_id')}, filename={r.get('filename')}, score={r.get('score'):.4f}")
-    
-    print("\n(b) Raw results from keyword/FTS5 search alone:")
-    for idx, r in enumerate(keyword_results):
-        print(f"  [{idx}] chunk_id={r.get('chunk_id')}, filename={r.get('filename')}, score={r.get('score'):.4f}")
+    logger.debug(f"HYBRID SEARCH: query='{query}', filters={filters}")
+    logger.debug(f"  Vector results: {len(vector_results)}, Keyword results: {len(keyword_results)}")
 
     k = 60
     scores = {}
@@ -488,10 +480,7 @@ async def hybrid_search(query: str, top_k: int = 10, filters: dict = None) -> li
 
             results.append(item)
 
-    print("\n(c) Fused RRF result:")
-    for idx, r in enumerate(results):
-        print(f"  [{idx}] chunk_id={r.get('chunk_id')}, filename={r.get('filename')}, fused_rrf_score={r.get('score'):.4f}")
-    print("-------------------------------------\n")
+    logger.debug(f"HYBRID SEARCH RRF: {len(results)} fused results, top={results[0].get('score',0):.4f}" if results else "HYBRID SEARCH RRF: 0 fused results")
 
     logger.info(f"Hybrid search total took {(time.time() - start_time)*1000:.1f}ms")
     return results

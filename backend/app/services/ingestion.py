@@ -34,19 +34,31 @@ def compute_file_hash(file_bytes: bytes) -> str:
 
 def parse_document(file_path: str, filename: str) -> list[dict]:
     """
-    Parse a document using Docling, preserving structure.
+    Parse a document, preserving structure.
     Returns a list of page dicts with 'text' and 'page_number'.
-    Falls back to basic text extraction if Docling fails.
+
+    Routing:
+    - .txt, .ppt  → direct fallback (Docling doesn't support these)
+    - .pdf         → direct fallback via PyMuPDF (Docling's OCR pipeline is
+                     extremely slow on CPU and causes timeouts)
+    - .docx, .pptx → try Docling first, fall back on error
     """
+    ext = Path(filename).suffix.lower()
+
+    # Formats that should SKIP Docling entirely
+    if ext in (".txt", ".ppt", ".pdf"):
+        logger.info(f"[INGEST] Using fallback parser for '{filename}' (ext={ext})")
+        return _fallback_parse(file_path, filename)
+
+    # For .docx and .pptx, try Docling first
     try:
         from docling.document_converter import DocumentConverter, PdfFormatOption
         from docling.datamodel.pipeline_options import PdfPipelineOptions, EasyOcrOptions
         
         if not hasattr(_converter_local, "converter"):
             pipeline_options = PdfPipelineOptions()
-            pipeline_options.do_ocr = True
+            pipeline_options.do_ocr = False
             pipeline_options.do_table_structure = False
-            pipeline_options.ocr_options = EasyOcrOptions(force_full_page_ocr=True)
             
             _converter_local.converter = DocumentConverter(
                 format_options={"pdf": PdfFormatOption(pipeline_options=pipeline_options)}
@@ -87,6 +99,7 @@ def parse_document(file_path: str, filename: str) -> list[dict]:
         return _fallback_parse(file_path, filename)
 
 
+
 def _fallback_parse(file_path: str, filename: str) -> list[dict]:
     """Fallback parser for when Docling is not available."""
     ext = Path(filename).suffix.lower()
@@ -101,7 +114,10 @@ def _fallback_parse(file_path: str, filename: str) -> list[dict]:
             doc = fitz.open(file_path)
             pages = []
             for i, page in enumerate(doc):
-                text = page.get_text()
+                # Use blocks to separate paragraphs properly with \n\n
+                blocks = page.get_text("blocks")
+                text_blocks = [b[4].strip() for b in blocks if b[6] == 0 and b[4].strip()]
+                text = "\n\n".join(text_blocks)
                 if text.strip():
                     pages.append({"text": text, "page_number": i + 1})
             doc.close()
@@ -140,7 +156,7 @@ def _fallback_parse(file_path: str, filename: str) -> list[dict]:
                 for shape in slide.shapes:
                     if hasattr(shape, "text") and shape.text.strip():
                         slide_text.append(shape.text.strip())
-                text = "\n".join(slide_text)
+                text = "\n\n".join(slide_text)
                 if text.strip():
                     pages.append({"text": text, "page_number": i + 1})
             if not pages:
